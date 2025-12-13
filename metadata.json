@@ -1,0 +1,5 @@
+{
+  "name": "AudioScribe Pro",
+  "description": "Professional audio transcription capable of handling large files (up to 200MB) using smart chunking technology.",
+  "requestFramePermissions": []
+}
