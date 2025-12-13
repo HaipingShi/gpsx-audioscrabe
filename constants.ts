@@ -1,7 +1,11 @@
-// Chunk size set to 6MB. 
-// Rationale: A 6MB MP3 (approx 10 mins) converts to ~20MB WAV (16kHz/16bit/Mono).
-// We must stay under Gemini's 20MB inline payload limit.
-export const CHUNK_SIZE_BYTES = 6 * 1024 * 1024; 
+// Chunk size set to 3MB (优化后).
+// Rationale:
+// - 更小的块 = 更精细的语义分段
+// - 3MB MP3 (约 5 分钟) 转换为 ~10MB WAV (16kHz/16bit/Mono)
+// - 远低于 Gemini 20MB 限制，留有安全余量
+// - 更容易进行语义分块和段落划分
+// - 降低单个块的幻觉风险
+export const CHUNK_SIZE_BYTES = 3 * 1024 * 1024;
 
 export const SUPPORTED_MIME_TYPES = [
   'audio/mp3',

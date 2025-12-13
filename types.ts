@@ -70,6 +70,10 @@ export interface CognitiveTask {
   // 质量指标
   qualityScore?: number; // 0-100
   confidenceScore?: number; // 0-1
+
+  // 转写引擎
+  transcriptionEngine?: 'FunASR' | 'Gemini Flash'; // 使用的转写引擎
+  engineFallbackUsed?: boolean; // 是否使用了降级
 }
 
 export interface ProcessingState {

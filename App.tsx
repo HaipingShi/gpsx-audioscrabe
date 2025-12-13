@@ -315,13 +315,15 @@ const App: React.FC = () => {
 
             currentText = cleanText(transcriptionResult.text);
 
-            // 记录使用的引擎
+            // 记录使用的引擎并保存到 task
             addLogToTask(taskId, `🎯 Engine: ${transcriptionResult.engine}${transcriptionResult.fallbackUsed ? ' (fallback)' : ''}`);
 
             if (attempts === 0) {
               const transcriptionMs = Date.now() - transcriptionStart;
               updateTask(taskId, {
-                timings: { ...task.timings, transcriptionMs }
+                timings: { ...task.timings, transcriptionMs },
+                transcriptionEngine: transcriptionResult.engine,
+                engineFallbackUsed: transcriptionResult.fallbackUsed
               });
             }
 
@@ -632,7 +634,27 @@ const App: React.FC = () => {
         .filter(t => t.transcription && t.transcription !== "[SILENCE]" && t.phase !== AgentPhase.SKIPPED)
         .map((t, index) => {
           const hasPolished = t.phase === AgentPhase.COMMITTED && t.polishedText;
+
+          // 格式化时间戳
+          const formatTime = (ms?: number) => {
+            if (!ms) return '未知';
+            const seconds = (ms / 1000).toFixed(1);
+            return `${seconds}s`;
+          };
+
+          // 元数据
+          const metadata = [
+            `#${t.id}`,
+            t.transcriptionEngine || '未知引擎',
+            t.engineFallbackUsed ? '⚠️ 降级' : '',
+            t.timings?.transcriptionMs ? `转写: ${formatTime(t.timings.transcriptionMs)}` : '',
+            t.timings?.polishingMs ? `精校: ${formatTime(t.timings.polishingMs)}` : '',
+            t.phase
+          ].filter(Boolean).join(' | ');
+
           return `## 段落 ${index + 1}
+
+> ${metadata}
 
 **清洗版**:
 ${hasPolished ? t.polishedText : t.transcription}
@@ -694,7 +716,7 @@ ${dualTrackContent}`;
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400 bg-slate-900 py-1.5 px-3 rounded border border-slate-800">
                <Sparkles size={12} className="text-yellow-500" />
-               <span>Gemini Flash + DeepSeek</span>
+               <span>FunASR + Gemini + DeepSeek</span>
             </div>
 
             {/* 缓存状态 */}

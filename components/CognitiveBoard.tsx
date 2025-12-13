@@ -63,12 +63,23 @@ export const CognitiveBoard: React.FC<CognitiveBoardProps> = ({ tasks, onRetry, 
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-slate-500">#{task.id}</span>
                 <span className="text-xs font-medium text-slate-300 uppercase">{task.phase}</span>
+                {/* 显示转写引擎 */}
+                {task.transcriptionEngine && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    task.transcriptionEngine === 'FunASR'
+                      ? 'bg-blue-500/20 text-blue-300'
+                      : 'bg-purple-500/20 text-purple-300'
+                  }`}>
+                    {task.transcriptionEngine}
+                    {task.engineFallbackUsed && ' ⚠️'}
+                  </span>
+                )}
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {getStatusIcon(task.phase)}
                 {(task.phase === AgentPhase.SKIPPED || task.phase === AgentPhase.ERROR || task.phase === AgentPhase.COMMITTED) && (
-                   <button 
+                   <button
                      onClick={() => onRetry(task.id)}
                      className="text-slate-500 hover:text-white transition-colors"
                      title="Manual Retry Chunk"
