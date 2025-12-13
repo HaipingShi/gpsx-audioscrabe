@@ -308,6 +308,31 @@ const App: React.FC = () => {
             const verification = verifyTranscription(currentText);
             updateTask(taskId, { entropy: verification.entropy });
 
+            // === PHASE 3.5: EARLY HALLUCINATION DETECTION ===
+            // 在转写后立即检测幻觉（使用本地快速检测）
+            const earlyDetection = await detectHallucination(currentText, currentText, chunkIndex);
+
+            if (earlyDetection.isHallucination && earlyDetection.confidence > 0.8) {
+              // 高置信度幻觉，立即重试
+              addLogToTask(taskId, `🚨 Transcription hallucination: ${earlyDetection.reason}`);
+              addLogToTask(taskId, `Evidence: ${earlyDetection.evidence.join(', ')}`);
+
+              if (attempts < MAX_RETRIES) {
+                addLogToTask(taskId, `🔄 Retrying transcription (attempt ${attempts + 1}/${MAX_RETRIES})...`);
+                customTemp = Math.max(0.1, 0.3 - attempts * 0.1); // 降低 temperature
+                attempts++;
+                continue; // 重新转写
+              } else {
+                addLogToTask(taskId, "❌ Max retries reached. Marking as hallucination.");
+                updateTask(taskId, {
+                  phase: AgentPhase.HALLUCINATION_DETECTED,
+                  hallucinationDetection: earlyDetection,
+                  needsRetry: true
+                }, `Hallucination: ${earlyDetection.reason}`);
+                return;
+              }
+            }
+
             if (verification.isValid) {
                isValid = true;
                addLogToTask(taskId, `✓ Valid (Entropy: ${verification.entropy.toFixed(2)})`);
@@ -319,10 +344,10 @@ const App: React.FC = () => {
                // === PHASE 4: CONSULTATION ===
                if (attempts < MAX_RETRIES) {
                    updateTask(taskId, { phase: AgentPhase.CONSULTATION });
-                   addLogToTask(taskId, `🤔 Suspicious: ${verification.reason}. Consulting Gemini 3 Pro...`);
+                   addLogToTask(taskId, `🤔 Suspicious: ${verification.reason}. Consulting DeepSeek...`);
                    const advice = await consultOnIssue(currentText, verification.reason || "Unknown error");
                    addLogToTask(taskId, `💡 Advisor: ${advice.action} -> ${advice.reasoning}`);
-                   
+
                    if (advice.action === 'KEEP') {
                        isValid = true;
                    } else if (advice.action === 'SKIP') {
