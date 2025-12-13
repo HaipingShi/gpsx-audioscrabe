@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Button } from './components/ui/Button';
 import { CognitiveBoard } from './components/CognitiveBoard';
-import { AppStatus, ProcessingState, CognitiveTask, AgentPhase } from './types';
+import { AppStatus, ProcessingState, CognitiveTask, AgentPhase, StateTransition } from './types';
 import { formatBytes, splitFileIntoChunks } from './utils/fileHelpers';
 import { transcribeChunk } from './services/geminiService';
 import { polishChunk, consultOnIssue } from './services/deepseekService';
 import { preprocessAudio } from './utils/audioProcessor';
 import { verifyTranscription, cleanText } from './utils/cognitive';
 import { detectSilence } from './utils/audioAnalysis';
+import { detectHallucination } from './services/hallucinationDetector';
 import { 
   FileAudio, 
   Play, 
@@ -94,14 +95,35 @@ const App: React.FC = () => {
   }, [finalPolishedText, state.status]);
   
   // --- Helper to update task state and refresh watchdog timestamp ---
-  const updateTask = (id: number, updates: Partial<CognitiveTask>) => {
+  const updateTask = (id: number, updates: Partial<CognitiveTask>, reason?: string) => {
     setState(prev => {
+      const task = prev.tasks.find(t => t.id === id);
+      if (!task) return prev;
+
+      // 记录状态转换
+      const stateTransition: StateTransition | null =
+        updates.phase && updates.phase !== task.phase
+          ? {
+              from: task.phase,
+              to: updates.phase,
+              timestamp: Date.now(),
+              reason,
+              metadata: {
+                retryCount: updates.retryCount ?? task.retryCount,
+                entropy: updates.entropy ?? task.entropy
+              }
+            }
+          : null;
+
       const newState = {
         ...prev,
         tasks: prev.tasks.map(t => t.id === id ? {
           ...t,
           ...updates,
-          lastUpdated: Date.now() // Feed the watchdog
+          lastUpdated: Date.now(), // Feed the watchdog
+          stateHistory: stateTransition
+            ? [...t.stateHistory, stateTransition]
+            : t.stateHistory
         } : t)
       };
 
@@ -115,7 +137,10 @@ const App: React.FC = () => {
               transcription: t.transcription,
               polishedText: t.polishedText,
               entropy: t.entropy,
-              retryCount: t.retryCount
+              retryCount: t.retryCount,
+              needsRetry: t.needsRetry,
+              hallucinationDetection: t.hallucinationDetection,
+              stateHistory: t.stateHistory
             })),
             timestamp: Date.now()
           }));
@@ -217,14 +242,25 @@ const App: React.FC = () => {
     let blob = task.blob;
     const chunkIndex = task.id - 1;
 
+    // 时间追踪
+    const startTime = Date.now();
+    let preprocessingStart: number;
+    let transcriptionStart: number;
+
     try {
         // === PHASE 0: PREPROCESSING ===
         // We do this per-chunk to handle large files efficiently and ensure valid WAV headers for each slice.
-        updateTask(taskId, { phase: AgentPhase.PREPROCESSING });
+        preprocessingStart = Date.now();
+        updateTask(taskId, { phase: AgentPhase.PREPROCESSING }, 'Starting preprocessing');
         addLogToTask(taskId, "Optimizing audio (16kHz Mono WAV)...");
-        
+
         // This creates an OfflineAudioContext. Concurrency is limited by the caller loop.
         blob = await preprocessAudio(blob);
+
+        const preprocessingMs = Date.now() - preprocessingStart;
+        updateTask(taskId, {
+          timings: { ...task.timings, preprocessingMs }
+        });
         
         // === PHASE 1: PERCEPTION (VAD) ===
         updateTask(taskId, { phase: AgentPhase.PERCEPTION });
@@ -245,15 +281,23 @@ const App: React.FC = () => {
             if (signal.aborted) throw new Error("Aborted");
 
             if (attempts > 0) {
-               updateTask(taskId, { phase: AgentPhase.REFINEMENT, retryCount: attempts });
+               updateTask(taskId, { phase: AgentPhase.REFINEMENT, retryCount: attempts }, `Retry attempt ${attempts}`);
             } else {
-               updateTask(taskId, { phase: AgentPhase.ACTION });
+               transcriptionStart = Date.now();
+               updateTask(taskId, { phase: AgentPhase.ACTION }, 'Starting transcription');
             }
 
             // === PHASE 2: ACTION ===
             // Note: We send the *processed* blob (WAV) to Gemini
             currentText = await transcribeChunk(blob, chunkIndex, totalChunks, attempts > 0, customTemp);
             currentText = cleanText(currentText);
+
+            if (attempts === 0) {
+              const transcriptionMs = Date.now() - transcriptionStart;
+              updateTask(taskId, {
+                timings: { ...task.timings, transcriptionMs }
+              });
+            }
 
             // === PHASE 3: VERIFICATION ===
             updateTask(taskId, { phase: AgentPhase.VERIFICATION, transcription: currentText });
@@ -308,24 +352,60 @@ const App: React.FC = () => {
         updateTask(taskId, {
           transcription: currentText,
           phase: AgentPhase.POLISHING
-        });
+        }, 'Starting polishing');
 
         // Polish 在后台异步执行，不阻塞主流程
+        const polishingStart = Date.now();
         polishChunk(currentText)
-          .then(polished => {
-            updateTask(taskId, {
-              polishedText: polished,
-              phase: AgentPhase.COMMITTED
-            });
-            addLogToTask(taskId, "✨ Polishing completed");
+          .then(async (polished) => {
+            const polishingMs = Date.now() - polishingStart;
+            const totalMs = Date.now() - startTime;
+
+            // === PHASE 6: HALLUCINATION DETECTION ===
+            addLogToTask(taskId, "🔍 Detecting hallucinations...");
+
+            const detection = await detectHallucination(
+              currentText,
+              polished,
+              chunkIndex
+            );
+
+            if (detection.isHallucination && detection.confidence > 0.7) {
+              // 检测到幻觉！
+              addLogToTask(taskId, `🚨 Hallucination detected! ${detection.reason}`);
+              addLogToTask(taskId, `Evidence: ${detection.evidence.join(', ')}`);
+
+              updateTask(taskId, {
+                polishedText: polished,
+                phase: AgentPhase.HALLUCINATION_DETECTED,
+                hallucinationDetection: detection,
+                needsRetry: detection.suggestedAction === 'RETRY',
+                timings: { ...task.timings, polishingMs, totalMs }
+              }, `Hallucination: ${detection.reason}`);
+
+              if (detection.suggestedAction === 'RETRY') {
+                addLogToTask(taskId, "⏳ Marked for retry after all chunks complete");
+              }
+            } else {
+              // 正常完成
+              updateTask(taskId, {
+                polishedText: polished,
+                phase: AgentPhase.COMMITTED,
+                hallucinationDetection: detection,
+                needsRetry: false,
+                timings: { ...task.timings, polishingMs, totalMs }
+              }, 'Polishing completed successfully');
+              addLogToTask(taskId, `✨ Polishing completed (${(totalMs / 1000).toFixed(1)}s)`);
+            }
           })
           .catch(err => {
             console.warn(`Polish failed for chunk ${taskId}:`, err);
             // Polish 失败不影响转写结果，使用原文
             updateTask(taskId, {
               polishedText: currentText,
-              phase: AgentPhase.COMMITTED
-            });
+              phase: AgentPhase.COMMITTED,
+              needsRetry: false
+            }, 'Polish failed, using raw text');
             addLogToTask(taskId, "⚠️ Polish failed, using raw text");
           });
 
@@ -359,7 +439,10 @@ const App: React.FC = () => {
       entropy: 0,
       retryCount: 0,
       logs: [],
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
+      stateHistory: [],
+      needsRetry: false,
+      timings: {}
     }));
 
     setState(prev => ({ 
@@ -395,20 +478,49 @@ const App: React.FC = () => {
     
     // Wait for remaining
     await Promise.all(running);
+
+    // === PHASE 7: AUTO-RETRY HALLUCINATED CHUNKS ===
+    // 等待所有 Polish 完成（包括幻觉检测）
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const tasksNeedingRetry = state.tasks.filter(t =>
+      t.needsRetry &&
+      t.phase === AgentPhase.HALLUCINATION_DETECTED &&
+      t.retryCount < MAX_RETRIES
+    );
+
+    if (tasksNeedingRetry.length > 0) {
+      console.log(`🔄 Auto-retrying ${tasksNeedingRetry.length} hallucinated chunks...`);
+
+      for (const task of tasksNeedingRetry) {
+        addLogToTask(task.id, "🔄 Auto-retry triggered by hallucination detection");
+
+        updateTask(task.id, {
+          phase: AgentPhase.PENDING_RETRY,
+          retryCount: task.retryCount + 1
+        }, 'Auto-retry for hallucination');
+
+        const controller = new AbortController();
+        taskControllers.current.set(task.id, controller);
+
+        await processSingleChunk(task, state.totalChunks, controller.signal);
+        taskControllers.current.delete(task.id);
+      }
+    }
   };
-  
+
   // Monitor global completion status
   useEffect(() => {
     if (state.status === AppStatus.PROCESSING) {
-      const allDone = state.tasks.every(t => 
-        [AgentPhase.COMMITTED, AgentPhase.SKIPPED, AgentPhase.ERROR].includes(t.phase)
+      const allDone = state.tasks.every(t =>
+        [AgentPhase.COMMITTED, AgentPhase.SKIPPED, AgentPhase.ERROR, AgentPhase.HALLUCINATION_DETECTED].includes(t.phase)
       );
       if (allDone && state.tasks.length > 0) {
         setState(prev => ({ ...prev, status: AppStatus.COMPLETED, progress: 100 }));
       }
-      
-      const completedCount = state.tasks.filter(t => 
-        [AgentPhase.COMMITTED, AgentPhase.SKIPPED, AgentPhase.ERROR].includes(t.phase)
+
+      const completedCount = state.tasks.filter(t =>
+        [AgentPhase.COMMITTED, AgentPhase.SKIPPED, AgentPhase.ERROR, AgentPhase.HALLUCINATION_DETECTED].includes(t.phase)
       ).length;
       setState(prev => ({ ...prev, progress: Math.round((completedCount / prev.totalChunks) * 100) }));
     }
