@@ -30,7 +30,7 @@ const CONCURRENCY_LIMIT = 2; // Prevent browser resource exhaustion (AudioContex
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState<'polished' | 'raw'>('polished');
-  
+
   const [state, setState] = useState<ProcessingState>({
     status: AppStatus.IDLE,
     progress: 0,
@@ -41,6 +41,34 @@ const App: React.FC = () => {
   // Map to store AbortControllers for EACH task individually
   const taskControllers = useRef<Map<number, AbortController>>(new Map());
   const transcriptionEndRef = useRef<HTMLDivElement>(null);
+
+  // 从 LocalStorage 恢复状态（页面加载时）
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('audioscribe_state');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const age = Date.now() - (parsed.timestamp || 0);
+
+        // 只恢复 24 小时内的数据
+        if (age < 24 * 60 * 60 * 1000 && parsed.tasks?.length > 0) {
+          console.log(`Restored ${parsed.tasks.length} tasks from localStorage`);
+          // 注意：这里只恢复文本数据，不恢复 blob 和运行状态
+          setState(prev => ({
+            ...prev,
+            tasks: parsed.tasks.map((t: any) => ({
+              ...t,
+              blob: new Blob(), // 空 blob，无法重新处理
+              logs: t.logs || [],
+              lastUpdated: Date.now()
+            }))
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore from localStorage:', e);
+    }
+  }, []);
 
   // --- Dynamic Assembly Engine ---
   const finalPolishedText = useMemo(() => {
@@ -67,23 +95,46 @@ const App: React.FC = () => {
   
   // --- Helper to update task state and refresh watchdog timestamp ---
   const updateTask = (id: number, updates: Partial<CognitiveTask>) => {
-    setState(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(t => t.id === id ? { 
-        ...t, 
-        ...updates,
-        lastUpdated: Date.now() // Feed the watchdog
-      } : t)
-    }));
+    setState(prev => {
+      const newState = {
+        ...prev,
+        tasks: prev.tasks.map(t => t.id === id ? {
+          ...t,
+          ...updates,
+          lastUpdated: Date.now() // Feed the watchdog
+        } : t)
+      };
+
+      // 持久化到 LocalStorage（异步，不阻塞 UI）
+      setTimeout(() => {
+        try {
+          localStorage.setItem('audioscribe_state', JSON.stringify({
+            tasks: newState.tasks.map(t => ({
+              id: t.id,
+              phase: t.phase,
+              transcription: t.transcription,
+              polishedText: t.polishedText,
+              entropy: t.entropy,
+              retryCount: t.retryCount
+            })),
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.warn('Failed to save to localStorage:', e);
+        }
+      }, 0);
+
+      return newState;
+    });
   };
 
   const addLogToTask = (id: number, log: string) => {
     setState(prev => ({
       ...prev,
-      tasks: prev.tasks.map(t => t.id === id ? { 
-        ...t, 
+      tasks: prev.tasks.map(t => t.id === id ? {
+        ...t,
         logs: [...t.logs, log],
-        lastUpdated: Date.now() 
+        lastUpdated: Date.now()
       } : t)
     }));
   };
@@ -252,10 +303,31 @@ const App: React.FC = () => {
            return;
         }
 
-        // === PHASE 5: POLISHING ===
-        updateTask(taskId, { phase: AgentPhase.POLISHING });
-        const polished = await polishChunk(currentText);
-        updateTask(taskId, { polishedText: polished, phase: AgentPhase.COMMITTED });
+        // === PHASE 5: POLISHING (异步执行，不阻塞下一个转写) ===
+        // 先标记转写完成，立即释放并发槽位
+        updateTask(taskId, {
+          transcription: currentText,
+          phase: AgentPhase.POLISHING
+        });
+
+        // Polish 在后台异步执行，不阻塞主流程
+        polishChunk(currentText)
+          .then(polished => {
+            updateTask(taskId, {
+              polishedText: polished,
+              phase: AgentPhase.COMMITTED
+            });
+            addLogToTask(taskId, "✨ Polishing completed");
+          })
+          .catch(err => {
+            console.warn(`Polish failed for chunk ${taskId}:`, err);
+            // Polish 失败不影响转写结果，使用原文
+            updateTask(taskId, {
+              polishedText: currentText,
+              phase: AgentPhase.COMMITTED
+            });
+            addLogToTask(taskId, "⚠️ Polish failed, using raw text");
+          });
 
     } catch (chunkError: any) {
         if (chunkError.message === "Aborted" || chunkError.message === "Watchdog Timeout") {
@@ -362,6 +434,32 @@ const App: React.FC = () => {
     navigator.clipboard.writeText(currentViewText);
   };
 
+  const clearCache = () => {
+    if (confirm('确定要清除所有缓存数据吗？这将删除所有已保存的转写结果。')) {
+      localStorage.removeItem('audioscribe_state');
+      setState({
+        status: AppStatus.IDLE,
+        progress: 0,
+        tasks: [],
+        totalChunks: 0,
+      });
+      setFile(null);
+      alert('缓存已清除');
+    }
+  };
+
+  // 计算缓存大小
+  const getCacheSize = () => {
+    try {
+      const saved = localStorage.getItem('audioscribe_state');
+      if (!saved) return '0 KB';
+      const bytes = new Blob([saved]).size;
+      return formatBytes(bytes);
+    } catch {
+      return 'Unknown';
+    }
+  };
+
   const downloadTranscription = (type: 'markdown' | 'raw' | 'dual') => {
     let text: string;
     let filename: string;
@@ -431,9 +529,27 @@ ${dualTrackContent}`;
               <p className="text-slate-400 text-xs uppercase tracking-wide">Self-Correcting Cognitive Agent</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400 bg-slate-900 py-1.5 px-3 rounded border border-slate-800">
-             <Sparkles size={12} className="text-yellow-500" />
-             <span>Flash (Listen) + Pro (Think)</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400 bg-slate-900 py-1.5 px-3 rounded border border-slate-800">
+               <Sparkles size={12} className="text-yellow-500" />
+               <span>Gemini Flash + DeepSeek</span>
+            </div>
+
+            {/* 缓存状态 */}
+            {state.tasks.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="text-[10px] text-slate-500">
+                  💾 {getCacheSize()}
+                </div>
+                <button
+                  onClick={clearCache}
+                  className="text-[10px] text-red-400 hover:text-red-300 underline"
+                  title="清除缓存"
+                >
+                  清除
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
