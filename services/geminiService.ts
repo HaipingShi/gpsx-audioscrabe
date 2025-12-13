@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AUDIO_MODEL, REASONING_MODEL } from '../constants';
 import { blobToBase64 } from '../utils/fileHelpers';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export const transcribeChunk = async (
   blob: Blob, 

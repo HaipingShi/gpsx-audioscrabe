@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 // DeepSeek API 使用 OpenAI 兼容接口
 const deepseek = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY,
+  apiKey: import.meta.env.VITE_DEEPSEEK_API_KEY,
   baseURL: 'https://api.deepseek.com',
   dangerouslyAllowBrowser: true // 允许在浏览器中使用
 });
