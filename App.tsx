@@ -4,7 +4,7 @@ import { Button } from './components/ui/Button';
 import { CognitiveBoard } from './components/CognitiveBoard';
 import { AppStatus, ProcessingState, CognitiveTask, AgentPhase, StateTransition } from './types';
 import { formatBytes, splitFileIntoChunks } from './utils/fileHelpers';
-import { transcribeChunk } from './services/geminiService';
+import { smartTranscribe, initTranscriptionService, TranscriptionEngine } from './services/transcriptionService';
 import { polishChunk, consultOnIssue } from './services/deepseekService';
 import { preprocessAudio } from './utils/audioProcessor';
 import { verifyTranscription, cleanText } from './utils/cognitive';
@@ -43,8 +43,20 @@ const App: React.FC = () => {
   const taskControllers = useRef<Map<number, AbortController>>(new Map());
   const transcriptionEndRef = useRef<HTMLDivElement>(null);
 
-  // 从 LocalStorage 恢复状态（页面加载时）
+  // 初始化转写服务并从 LocalStorage 恢复状态
   useEffect(() => {
+    // 检查转写引擎可用性
+    initTranscriptionService().then(({ funasrAvailable, geminiAvailable }) => {
+      if (!funasrAvailable && !geminiAvailable) {
+        console.error('❌ No transcription engine available!');
+      } else if (funasrAvailable) {
+        console.log('✅ FunASR is primary engine');
+      } else {
+        console.log('⚠️ Only Gemini available (FunASR unavailable)');
+      }
+    });
+
+    // 恢复之前的状态
     try {
       const saved = localStorage.getItem('audioscribe_state');
       if (saved) {
@@ -292,9 +304,19 @@ const App: React.FC = () => {
             }
 
             // === PHASE 2: ACTION ===
-            // Note: We send the *processed* blob (WAV) to Gemini
-            currentText = await transcribeChunk(blob, chunkIndex, totalChunks, attempts > 0, customTemp);
-            currentText = cleanText(currentText);
+            // 使用智能双引擎转写（FunASR 优先，Gemini 兜底）
+            const transcriptionResult = await smartTranscribe(
+              blob,
+              chunkIndex,
+              totalChunks,
+              attempts > 0,
+              customTemp
+            );
+
+            currentText = cleanText(transcriptionResult.text);
+
+            // 记录使用的引擎
+            addLogToTask(taskId, `🎯 Engine: ${transcriptionResult.engine}${transcriptionResult.fallbackUsed ? ' (fallback)' : ''}`);
 
             if (attempts === 0) {
               const transcriptionMs = Date.now() - transcriptionStart;
@@ -309,13 +331,12 @@ const App: React.FC = () => {
             updateTask(taskId, { entropy: verification.entropy });
 
             // === PHASE 3.5: EARLY HALLUCINATION DETECTION ===
-            // 在转写后立即检测幻觉（使用本地快速检测）
-            const earlyDetection = await detectHallucination(currentText, currentText, chunkIndex);
+            // 使用转写结果中的幻觉检测数据（已在 smartTranscribe 中完成）
+            const earlyDetection = transcriptionResult.hallucinationDetection!;
 
             if (earlyDetection.isHallucination && earlyDetection.confidence > 0.8) {
               // 高置信度幻觉，立即重试
               addLogToTask(taskId, `🚨 Transcription hallucination: ${earlyDetection.reason}`);
-              addLogToTask(taskId, `Evidence: ${earlyDetection.evidence.join(', ')}`);
 
               if (attempts < MAX_RETRIES) {
                 addLogToTask(taskId, `🔄 Retrying transcription (attempt ${attempts + 1}/${MAX_RETRIES})...`);
