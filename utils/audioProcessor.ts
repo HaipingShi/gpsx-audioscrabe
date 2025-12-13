@@ -64,17 +64,62 @@ const audioBufferToWav = (buffer: AudioBuffer): Blob => {
 };
 
 /**
+ * Checks if audio is already in optimal format (16kHz mono WAV)
+ */
+const isOptimalFormat = async (blob: Blob): Promise<boolean> => {
+  // Quick check: if it's a WAV file, check the header
+  if (blob.type === 'audio/wav' || blob.type === 'audio/x-wav') {
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const view = new DataView(arrayBuffer);
+
+      // Check RIFF header
+      if (view.getUint32(0, false) !== 0x52494646) return false; // 'RIFF'
+      if (view.getUint32(8, false) !== 0x57415645) return false; // 'WAVE'
+
+      // Find fmt chunk (usually at offset 12)
+      let offset = 12;
+      while (offset < Math.min(arrayBuffer.byteLength, 200)) {
+        const chunkId = view.getUint32(offset, false);
+        const chunkSize = view.getUint32(offset + 4, true);
+
+        if (chunkId === 0x666d7420) { // 'fmt '
+          const numChannels = view.getUint16(offset + 8 + 2, true);
+          const sampleRate = view.getUint32(offset + 8 + 4, true);
+
+          // Check if it's 16kHz mono
+          return sampleRate === 16000 && numChannels === 1;
+        }
+
+        offset += 8 + chunkSize;
+      }
+    } catch (e) {
+      console.warn("Failed to parse WAV header:", e);
+    }
+  }
+  return false;
+};
+
+/**
  * Preprocesses audio chunk:
  * 1. Resample to 16kHz
  * 2. Downmix to Mono
  * 3. Apply High-pass filter (80Hz) to remove rumble
  * 4. Apply Low-pass filter (8kHz) to remove high freq noise
+ *
+ * Skips processing if audio is already in optimal format (16kHz mono WAV)
  */
 export const preprocessAudio = async (blob: Blob): Promise<Blob> => {
+  // Skip processing if already optimal
+  if (await isOptimalFormat(blob)) {
+    console.log("Audio already in optimal format (16kHz mono WAV), skipping preprocessing");
+    return blob;
+  }
+
   // Create an AudioContext to decode the file
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   const audioContext = new AudioContextClass();
-  
+
   try {
     const arrayBuffer = await blob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -91,7 +136,7 @@ export const preprocessAudio = async (blob: Blob): Promise<Blob> => {
     source.buffer = audioBuffer;
 
     // --- Noise Reduction Filters ---
-    
+
     // 1. High-pass filter @ 80Hz (Removes low rumble, microphone handling noise)
     const highPassFilter = offlineContext.createBiquadFilter();
     highPassFilter.type = 'highpass';
