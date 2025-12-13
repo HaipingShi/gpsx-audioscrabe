@@ -72,8 +72,7 @@ export interface CognitiveTask {
   confidenceScore?: number; // 0-1
 
   // 转写引擎
-  transcriptionEngine?: 'FunASR' | 'Gemini Flash'; // 使用的转写引擎
-  engineFallbackUsed?: boolean; // 是否使用了降级
+  transcriptionEngine?: 'Gemini Flash'; // 使用的转写引擎
 }
 
 export interface ProcessingState {

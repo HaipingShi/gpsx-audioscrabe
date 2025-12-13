@@ -65,13 +65,8 @@ export const CognitiveBoard: React.FC<CognitiveBoardProps> = ({ tasks, onRetry, 
                 <span className="text-xs font-medium text-slate-300 uppercase">{task.phase}</span>
                 {/* 显示转写引擎 */}
                 {task.transcriptionEngine && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    task.transcriptionEngine === 'FunASR'
-                      ? 'bg-blue-500/20 text-blue-300'
-                      : 'bg-purple-500/20 text-purple-300'
-                  }`}>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">
                     {task.transcriptionEngine}
-                    {task.engineFallbackUsed && ' ⚠️'}
                   </span>
                 )}
               </div>

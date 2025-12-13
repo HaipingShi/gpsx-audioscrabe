@@ -46,13 +46,11 @@ const App: React.FC = () => {
   // 初始化转写服务并从 LocalStorage 恢复状态
   useEffect(() => {
     // 检查转写引擎可用性
-    initTranscriptionService().then(({ funasrAvailable, geminiAvailable }) => {
-      if (!funasrAvailable && !geminiAvailable) {
-        console.error('❌ No transcription engine available!');
-      } else if (funasrAvailable) {
-        console.log('✅ FunASR is primary engine');
+    initTranscriptionService().then(({ geminiAvailable }) => {
+      if (!geminiAvailable) {
+        console.error('❌ Gemini API Key not configured!');
       } else {
-        console.log('⚠️ Only Gemini available (FunASR unavailable)');
+        console.log('✅ Gemini Flash is ready');
       }
     });
 
@@ -304,7 +302,7 @@ const App: React.FC = () => {
             }
 
             // === PHASE 2: ACTION ===
-            // 使用智能双引擎转写（FunASR 优先，Gemini 兜底）
+            // 使用 Gemini Flash 进行转写
             const transcriptionResult = await smartTranscribe(
               blob,
               chunkIndex,
@@ -316,14 +314,13 @@ const App: React.FC = () => {
             currentText = cleanText(transcriptionResult.text);
 
             // 记录使用的引擎并保存到 task
-            addLogToTask(taskId, `🎯 Engine: ${transcriptionResult.engine}${transcriptionResult.fallbackUsed ? ' (fallback)' : ''}`);
+            addLogToTask(taskId, `🎯 Engine: ${transcriptionResult.engine}`);
 
             if (attempts === 0) {
               const transcriptionMs = Date.now() - transcriptionStart;
               updateTask(taskId, {
                 timings: { ...task.timings, transcriptionMs },
-                transcriptionEngine: transcriptionResult.engine,
-                engineFallbackUsed: transcriptionResult.fallbackUsed
+                transcriptionEngine: transcriptionResult.engine
               });
             }
 
@@ -645,8 +642,7 @@ const App: React.FC = () => {
           // 元数据
           const metadata = [
             `#${t.id}`,
-            t.transcriptionEngine || '未知引擎',
-            t.engineFallbackUsed ? '⚠️ 降级' : '',
+            t.transcriptionEngine || 'Gemini Flash',
             t.timings?.transcriptionMs ? `转写: ${formatTime(t.timings.transcriptionMs)}` : '',
             t.timings?.polishingMs ? `精校: ${formatTime(t.timings.polishingMs)}` : '',
             t.phase
@@ -716,7 +712,7 @@ ${dualTrackContent}`;
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400 bg-slate-900 py-1.5 px-3 rounded border border-slate-800">
                <Sparkles size={12} className="text-yellow-500" />
-               <span>FunASR + Gemini + DeepSeek</span>
+               <span>Gemini Flash + DeepSeek</span>
             </div>
 
             {/* 缓存状态 */}
