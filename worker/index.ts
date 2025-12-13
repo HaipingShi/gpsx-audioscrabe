@@ -28,12 +28,12 @@ const app = new Hono<{ Bindings: Env }>();
 // 中间件
 app.use('*', logger());
 app.use('*', cors({
-  origin: '*', // 生产环境应该限制为特定域名
+  origin: ['http://localhost:3000', 'http://localhost:5173'], // 开发环境允许的源
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length'],
   maxAge: 600,
-  credentials: true,
+  credentials: false, // 修复 CORS 问题
 }));
 
 // 健康检查
