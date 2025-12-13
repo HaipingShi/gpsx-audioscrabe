@@ -38,10 +38,8 @@ const App: React.FC = () => {
 
 // Navigation Component
 const Navigation: React.FC = () => {
-  const { currentView, setCurrentView } = useAppStore((state) => ({
-    currentView: state.currentView,
-    setCurrentView: state.setCurrentView,
-  }));
+  const currentView = useAppStore((state) => state.currentView);
+  const setCurrentView = useAppStore((state) => state.setCurrentView);
 
   const navItems = [
     { id: 'upload' as const, label: '上传', icon: '📤' },

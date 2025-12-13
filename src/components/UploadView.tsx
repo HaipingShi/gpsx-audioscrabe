@@ -12,12 +12,10 @@ export const UploadView: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const { userId, apiConfig, setCurrentJob, setCurrentView } = useAppStore((state) => ({
-    userId: state.userId,
-    apiConfig: state.apiConfig,
-    setCurrentJob: state.setCurrentJob,
-    setCurrentView: state.setCurrentView,
-  }));
+  const userId = useAppStore((state) => state.userId);
+  const apiConfig = useAppStore((state) => state.apiConfig);
+  const setCurrentJob = useAppStore((state) => state.setCurrentJob);
+  const setCurrentView = useAppStore((state) => state.setCurrentView);
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);

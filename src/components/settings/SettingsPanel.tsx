@@ -6,12 +6,10 @@ import { Settings, Key, Save, CheckCircle2, XCircle, Loader2 } from 'lucide-reac
 import type { LLMProvider, ApiMode } from '../../types';
 
 export const SettingsPanel: React.FC = () => {
-  const { userId, apiConfig, setUserId, setApiConfig } = useAppStore((state) => ({
-    userId: state.userId,
-    apiConfig: state.apiConfig,
-    setUserId: state.setUserId,
-    setApiConfig: state.setApiConfig,
-  }));
+  const userId = useAppStore((state) => state.userId);
+  const apiConfig = useAppStore((state) => state.apiConfig);
+  const setUserId = useAppStore((state) => state.setUserId);
+  const setApiConfig = useAppStore((state) => state.setApiConfig);
 
   const [formData, setFormData] = useState({
     userId: userId || '',

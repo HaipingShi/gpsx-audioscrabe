@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>清理存储 - AudioScribe FLUX</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #581c87 50%, #1e293b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 400px;
+      text-align: center;
+    }
+    h1 {
+      color: white;
+      margin: 0 0 16px 0;
+      font-size: 24px;
+    }
+    p {
+      color: #cbd5e1;
+      margin: 0 0 24px 0;
+    }
+    button {
+      background: #9333ea;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    button:hover {
+      background: #7c3aed;
+    }
+    .success {
+      color: #4ade80;
+      margin-top: 16px;
+      display: none;
+    }
+    .info {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 清理本地存储</h1>
+    <p>如果应用出现问题，点击下面的按钮清理本地缓存</p>
+    
+    <button onclick="clearStorage()">清理并重启</button>
+    <button onclick="goHome()" style="background: #475569;">返回首页</button>
+    
+    <div class="success" id="success">
+      ✅ 存储已清理！正在重定向...
+    </div>
+    
+    <div class="info">
+      这将清除所有本地缓存数据，包括用户配置和任务列表
+    </div>
+  </div>
+
+  <script>
+    function clearStorage() {
+      try {
+        // 清理 localStorage
+        localStorage.clear();
+        
+        // 清理 sessionStorage
+        sessionStorage.clear();
+        
+        // 显示成功消息
+        document.getElementById('success').style.display = 'block';
+        
+        // 2秒后重定向到首页
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      } catch (error) {
+        alert('清理失败: ' + error.message);
+      }
+    }
+    
+    function goHome() {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>
+

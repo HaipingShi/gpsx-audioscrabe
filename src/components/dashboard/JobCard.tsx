@@ -15,10 +15,8 @@ interface JobCardProps {
 }
 
 export const JobCard: React.FC<JobCardProps> = ({ job }) => {
-  const { setCurrentJob, setCurrentView } = useAppStore((state) => ({
-    setCurrentJob: state.setCurrentJob,
-    setCurrentView: state.setCurrentView,
-  }));
+  const setCurrentJob = useAppStore((state) => state.setCurrentJob);
+  const setCurrentView = useAppStore((state) => state.setCurrentView);
 
   const handleViewDetails = () => {
     setCurrentJob(job);

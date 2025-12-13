@@ -7,18 +7,16 @@ import { Loader2, FolderOpen } from 'lucide-react';
 import type { TranscriptionJob } from '../../types';
 
 export const DashboardView: React.FC = () => {
-  const {
-    userId,
-    jobs,
-    jobsLoading,
-    jobsError,
-    setJobs,
-    setJobsLoading,
-    setJobsError,
-    dashboardFilters,
-    pagination,
-    setPagination,
-  } = useAppStore();
+  const userId = useAppStore((state) => state.userId);
+  const jobs = useAppStore((state) => state.jobs);
+  const jobsLoading = useAppStore((state) => state.jobsLoading);
+  const jobsError = useAppStore((state) => state.jobsError);
+  const setJobs = useAppStore((state) => state.setJobs);
+  const setJobsLoading = useAppStore((state) => state.setJobsLoading);
+  const setJobsError = useAppStore((state) => state.setJobsError);
+  const dashboardFilters = useAppStore((state) => state.dashboardFilters);
+  const pagination = useAppStore((state) => state.pagination);
+  const setPagination = useAppStore((state) => state.setPagination);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -65,7 +63,8 @@ export const DashboardView: React.FC = () => {
   // 初始加载
   useEffect(() => {
     loadJobs();
-  }, [userId, dashboardFilters, pagination.page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, dashboardFilters.status, pagination.page]);
 
   // 过滤和排序任务
   const filteredJobs = React.useMemo(() => {

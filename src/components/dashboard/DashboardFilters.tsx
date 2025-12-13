@@ -4,13 +4,9 @@ import { Search, Filter, X } from 'lucide-react';
 import type { JobStatus } from '../../types';
 
 export const DashboardFilters: React.FC = () => {
-  const { dashboardFilters, setDashboardFilters, resetDashboardFilters } = useAppStore(
-    (state) => ({
-      dashboardFilters: state.dashboardFilters,
-      setDashboardFilters: state.setDashboardFilters,
-      resetDashboardFilters: state.resetDashboardFilters,
-    })
-  );
+  const dashboardFilters = useAppStore((state) => state.dashboardFilters);
+  const setDashboardFilters = useAppStore((state) => state.setDashboardFilters);
+  const resetDashboardFilters = useAppStore((state) => state.resetDashboardFilters);
 
   const statusOptions: { value: JobStatus; label: string }[] = [
     { value: 'created', label: '已创建' },

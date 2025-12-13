@@ -6,10 +6,8 @@ import { Loader2, ArrowLeft, Download, Copy } from 'lucide-react';
 import type { CompareData } from '../../types';
 
 export const CompareView: React.FC = () => {
-  const { currentJob, setCurrentView } = useAppStore((state) => ({
-    currentJob: state.currentJob,
-    setCurrentView: state.setCurrentView,
-  }));
+  const currentJob = useAppStore((state) => state.currentJob);
+  const setCurrentView = useAppStore((state) => state.setCurrentView);
 
   const [compareData, setCompareData] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(false);
