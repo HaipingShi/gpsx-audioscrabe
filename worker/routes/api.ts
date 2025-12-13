@@ -158,7 +158,39 @@ apiRoutes.post('/jobs', async (c) => {
     });
 
     // TODO: 上传音频到 R2
-    // TODO: 创建 Durable Object 实例开始处理
+
+    // 🆕 异步启动转写处理
+    if (audioData) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            // 简单分块（每 30 秒一块，假设 16kHz 采样率）
+            const chunkSize = 16000 * 30 * 2; // 30 秒 * 2 字节（16-bit）
+            const audioBuffer = Buffer.from(audioData, 'base64');
+            const chunks: string[] = [];
+
+            for (let i = 0; i < audioBuffer.length; i += chunkSize) {
+              const chunk = audioBuffer.slice(i, Math.min(i + chunkSize, audioBuffer.length));
+              chunks.push(chunk.toString('base64'));
+            }
+
+            // 调用转写 API
+            await fetch(`${c.req.url.split('/api')[0]}/api/transcribe`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jobId,
+                userId,
+                fileName,
+                audioChunks: chunks,
+              }),
+            });
+          } catch (error) {
+            console.error('Failed to start transcription:', error);
+          }
+        })()
+      );
+    }
 
     return c.json({
       success: true,

@@ -66,6 +66,27 @@ export const DashboardView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, dashboardFilters.status, pagination.page]);
 
+  // 🆕 轮询更新进行中的任务
+  useEffect(() => {
+    // 检查是否有进行中的任务
+    const hasActiveJobs = jobs.some(
+      (job) =>
+        job.status === 'processing' ||
+        job.status === 'transcribing' ||
+        job.status === 'polishing' ||
+        job.status === 'uploading'
+    );
+
+    if (!hasActiveJobs) return;
+
+    // 每 2 秒轮询一次
+    const interval = setInterval(() => {
+      loadJobs();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [jobs]);
+
   // 过滤和排序任务
   const filteredJobs = React.useMemo(() => {
     let filtered = [...jobs];

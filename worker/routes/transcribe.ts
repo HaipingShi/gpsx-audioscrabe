@@ -31,11 +31,23 @@ app.post('/', async (c) => {
     const stub = c.env.TRANSCRIPTION_PROCESSOR.get(id);
 
     // 初始化任务
-    await stub.initialize(jobId, userId, fileName, audioChunks.length);
+    const initResponse = await stub.fetch('http://do/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId, userId, fileName, chunkCount: audioChunks.length }),
+    });
+
+    if (!initResponse.ok) {
+      throw new Error('Failed to initialize DO');
+    }
 
     // 异步开始处理（不等待完成）
     c.executionCtx.waitUntil(
-      stub.startProcessing(audioChunks)
+      stub.fetch('http://do/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioChunks }),
+      })
     );
 
     return c.json({
@@ -66,7 +78,8 @@ app.get('/:jobId', async (c) => {
     const stub = c.env.TRANSCRIPTION_PROCESSOR.get(id);
 
     // 获取状态
-    const state = await stub.getState();
+    const response = await stub.fetch('http://do/state');
+    const state = await response.json();
 
     if (!state) {
       return c.json({ error: 'Job not found' }, 404);
@@ -80,7 +93,7 @@ app.get('/:jobId', async (c) => {
       rawTranscription: state.rawTranscription,
       polishedText: state.polishedText,
       error: state.error,
-      chunks: state.chunks.map(chunk => ({
+      chunks: state.chunks.map((chunk: any) => ({
         id: chunk.id,
         status: chunk.status,
         error: chunk.error,

@@ -294,16 +294,33 @@ export class TranscriptionProcessor extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === '/state') {
+    // 获取状态
+    if (url.pathname === '/state' || request.method === 'GET') {
       const state = await this.getState();
       return new Response(JSON.stringify(state), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // 初始化任务
+    if (url.pathname === '/initialize' && request.method === 'POST') {
+      const { jobId, userId, fileName, chunkCount } = await request.json() as {
+        jobId: string;
+        userId: string;
+        fileName: string;
+        chunkCount: number;
+      };
+      await this.initialize(jobId, userId, fileName, chunkCount);
+      return new Response(JSON.stringify({ success: true }));
+    }
+
+    // 开始处理
     if (url.pathname === '/start' && request.method === 'POST') {
       const { audioChunks } = await request.json() as { audioChunks: string[] };
-      await this.startProcessing(audioChunks);
+
+      // 异步处理，立即返回
+      this.ctx.waitUntil(this.startProcessing(audioChunks));
+
       return new Response(JSON.stringify({ success: true }));
     }
 
