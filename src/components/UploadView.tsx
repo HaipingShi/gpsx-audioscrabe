@@ -40,13 +40,20 @@ export const UploadView: React.FC = () => {
       setProgress(10);
       const audioBuffer = await file.arrayBuffer();
       const processedAudio = await preprocessAudio(audioBuffer);
-      
+
       setProgress(30);
 
-      // 2. 转换为 base64
-      const base64Audio = btoa(
-        String.fromCharCode(...new Uint8Array(processedAudio))
-      );
+      // 2. 转换为 base64（使用 Blob 和 FileReader）
+      const audioBlob = new Blob([processedAudio], { type: 'audio/wav' });
+      const base64Audio = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(',')[1]; // Remove data:audio/wav;base64, prefix
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
 
       setProgress(50);
 

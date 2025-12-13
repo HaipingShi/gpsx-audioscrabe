@@ -107,21 +107,16 @@ const isOptimalFormat = async (blob: Blob): Promise<boolean> => {
  * 3. Apply High-pass filter (80Hz) to remove rumble
  * 4. Apply Low-pass filter (8kHz) to remove high freq noise
  *
- * Skips processing if audio is already in optimal format (16kHz mono WAV)
+ * Accepts ArrayBuffer or Blob and returns ArrayBuffer
  */
-export const preprocessAudio = async (blob: Blob): Promise<Blob> => {
-  // Skip processing if already optimal
-  if (await isOptimalFormat(blob)) {
-    console.log("Audio already in optimal format (16kHz mono WAV), skipping preprocessing");
-    return blob;
-  }
-
+export const preprocessAudio = async (input: ArrayBuffer | Blob): Promise<ArrayBuffer> => {
   // Create an AudioContext to decode the file
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   const audioContext = new AudioContextClass();
 
   try {
-    const arrayBuffer = await blob.arrayBuffer();
+    // Convert to ArrayBuffer if needed
+    const arrayBuffer = input instanceof ArrayBuffer ? input : await input.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
     // Create an OfflineAudioContext for rendering at target specs
@@ -157,13 +152,14 @@ export const preprocessAudio = async (blob: Blob): Promise<Blob> => {
     // Render
     const renderedBuffer = await offlineContext.startRendering();
 
-    // Encode to WAV
-    return audioBufferToWav(renderedBuffer);
+    // Encode to WAV and return as ArrayBuffer
+    const wavBlob = audioBufferToWav(renderedBuffer);
+    return await wavBlob.arrayBuffer();
 
   } catch (error) {
     console.error("Audio preprocessing failed:", error);
-    // Return original blob if processing fails, hoping Gemini handles it
-    return blob;
+    // Return original input if processing fails
+    return input instanceof ArrayBuffer ? input : await input.arrayBuffer();
   } finally {
     if (audioContext.state !== 'closed') {
       audioContext.close();
