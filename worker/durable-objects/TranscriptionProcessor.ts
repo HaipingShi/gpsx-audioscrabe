@@ -263,7 +263,7 @@ export class TranscriptionProcessor extends DurableObject<Env> {
 
     try {
       const stmt = this.env.DB.prepare(`
-        INSERT INTO state_transitions (job_id, from_state, to_state, timestamp)
+        INSERT INTO state_transitions (job_id, from_state, to_state, reason)
         VALUES (?, ?, ?, ?)
       `);
 
@@ -271,7 +271,7 @@ export class TranscriptionProcessor extends DurableObject<Env> {
         this.jobState.jobId,
         fromState,
         toState,
-        new Date().toISOString()
+        `State changed from ${fromState || 'null'} to ${toState}`
       ).run();
     } catch (error) {
       console.error('Failed to record state transition:', error);
