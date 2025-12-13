@@ -362,13 +362,52 @@ const App: React.FC = () => {
     navigator.clipboard.writeText(currentViewText);
   };
 
-  const downloadTranscription = (type: 'markdown' | 'raw') => {
-    const text = type === 'markdown' ? finalPolishedText : finalRawText;
+  const downloadTranscription = (type: 'markdown' | 'raw' | 'dual') => {
+    let text: string;
+    let filename: string;
+
+    if (type === 'dual') {
+      // 双轨制格式：同时包含原文和清洗版
+      const dualTrackContent = state.tasks
+        .filter(t => t.transcription && t.transcription !== "[SILENCE]" && t.phase !== AgentPhase.SKIPPED)
+        .map((t, index) => {
+          const hasPolished = t.phase === AgentPhase.COMMITTED && t.polishedText;
+          return `## 段落 ${index + 1}
+
+**清洗版**:
+${hasPolished ? t.polishedText : t.transcription}
+
+<details>
+<summary>📝 查看原文</summary>
+
+${t.transcription}
+
+</details>
+
+---
+`;
+        })
+        .join('\n');
+
+      text = `# ${file?.name || '转写文档'} - 双轨制版本
+
+> 本文档采用"保守型清洗"策略，保留原文以确保数据保真度。
+> 点击"📝 查看原文"可展开查看未经处理的原始转写文本。
+
+---
+
+${dualTrackContent}`;
+      filename = `${file?.name.split('.')[0] || 'transcript'}_DualTrack.md`;
+    } else {
+      text = type === 'markdown' ? finalPolishedText : finalRawText;
+      filename = `${file?.name.split('.')[0] || 'transcript'}_${type === 'markdown' ? 'Polished' : 'Raw'}.md`;
+    }
+
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${file?.name.split('.')[0] || 'transcript'}_${type === 'markdown' ? 'Polished' : 'Raw'}.md`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -492,14 +531,56 @@ const App: React.FC = () => {
                     <Button variant="ghost" size="sm" onClick={copyToClipboard} disabled={!currentViewText}>
                       <Copy size={14} />
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => downloadTranscription(activeTab === 'polished' ? 'markdown' : 'raw')} 
-                      disabled={!currentViewText}
-                    >
-                      <Download size={14} />
-                    </Button>
+
+                    {/* 下载菜单 */}
+                    <div className="relative group">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!currentViewText}
+                        className="flex items-center gap-1"
+                      >
+                        <Download size={14} />
+                        <span className="text-xs">▼</span>
+                      </Button>
+
+                      {/* 下拉菜单 */}
+                      <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                        <button
+                          onClick={() => downloadTranscription('dual')}
+                          disabled={!currentViewText}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 rounded-t-lg flex items-center gap-2 text-slate-200 disabled:opacity-50"
+                        >
+                          <FileJson size={14} className="text-indigo-400" />
+                          <div>
+                            <div className="font-medium">双轨制版本</div>
+                            <div className="text-xs text-slate-400">原文+清洗版</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => downloadTranscription('markdown')}
+                          disabled={!finalPolishedText}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 flex items-center gap-2 text-slate-200 disabled:opacity-50"
+                        >
+                          <Download size={14} className="text-green-400" />
+                          <div>
+                            <div className="font-medium">仅清洗版</div>
+                            <div className="text-xs text-slate-400">精校后文本</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => downloadTranscription('raw')}
+                          disabled={!finalRawText}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-slate-700 rounded-b-lg flex items-center gap-2 text-slate-200 disabled:opacity-50"
+                        >
+                          <Download size={14} className="text-slate-400" />
+                          <div>
+                            <div className="font-medium">仅原文</div>
+                            <div className="text-xs text-slate-400">未处理文本</div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
                  </div>
               </div>
               

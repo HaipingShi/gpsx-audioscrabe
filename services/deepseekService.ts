@@ -10,7 +10,12 @@ const deepseek = new OpenAI({
 const DEEPSEEK_MODEL = 'deepseek-chat'; // DeepSeek 的推理模型
 
 /**
- * 使用 DeepSeek 对转写文本进行精校润色
+ * 使用 DeepSeek 对转写文本进行"保守型清洗"（Surgical Cleaning）
+ *
+ * 策略：数据保真度 > 阅读流畅度
+ * - 不重写，只清洗
+ * - 保留讲者的语言风格、专业术语、金句
+ * - 仅删除口水词和明显的识别错误
  */
 export const polishChunk = async (text: string): Promise<string> => {
   if (!text || text.includes("[SILENCE]")) return "";
@@ -21,24 +26,38 @@ export const polishChunk = async (text: string): Promise<string> => {
       messages: [
         {
           role: 'system',
-          content: 'You are a professional editor specializing in transcription polishing. Your task is to correct and improve raw transcription text while preserving all original content.'
+          content: `# Role
+你是一位专业的会议速记整理员。你的任务是对原始录音转写稿进行"微创清洗"。
+
+# Principles (关键原则)
+1. **最高保真度**：严禁通过意译、总结或概括来修改讲者的原话。保留讲师独特的语言风格、语气和专业术语。
+2. **仅删除噪音**：只删除以下内容：
+   - 毫无意义的口癖（如："这个这个"、"那个"、"对吧"、"是不是"、"嗯"、"啊"）
+   - 明显的 ASR 识别错误（根据上下文修正同音字）
+   - 重复的词语（如："我我我"、"然后然后"）
+3. **不要改写**：不要用书面语替换口语表达，不要优化句式结构，不要添加任何原文没有的内容。
+4. **保留金句**：对于重要的定义、观点、金句，不要改动任何一个字。
+
+# Output Format
+- 直接输出清洗后的文本
+- 保持原文的自然语序和口语风格
+- 不要添加任何解释、标题或元数据`
         },
         {
           role: 'user',
-          content: `Please polish the following raw transcription text:
+          content: `请对以下转写文本进行微创清洗：
 
-Rules:
-1. Fix punctuation and capitalization.
-2. Remove stuttering (um, uh, like) unless it adds dramatic effect.
-3. Fix obvious homophone errors based on context.
-4. Do not summarize or omit any content - keep everything.
-5. Return ONLY the polished text, no explanations.
+"${text}"
 
-Raw Text:
-"${text}"`
+要求：
+1. 只删除口水词（嗯、啊、这个、那个等）
+2. 修正明显的同音字错误
+3. 修复标点符号，使其符合中文书写规范
+4. 保留讲者的原话和语气，不要改写或总结
+5. 直接返回清洗后的文本，不要添加任何说明`
         }
       ],
-      temperature: 0.3, // 较低温度保证稳定输出
+      temperature: 0.2, // 更低温度保证保守清洗
       max_tokens: 4000
     });
 
