@@ -116,8 +116,21 @@ Return ONLY a JSON object with this exact structure:
       throw new Error("Empty response from DeepSeek");
     }
 
-    const result = JSON.parse(content) as ConsultationResult;
-    
+    // 清理可能的 markdown 代码块标记
+    const cleanContent = content.trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    let result: ConsultationResult;
+    try {
+      result = JSON.parse(cleanContent);
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      console.error("Content:", cleanContent);
+      throw new Error(`Failed to parse JSON: ${parseError}`);
+    }
+
     // 验证返回的 action 是否有效
     if (!['RETRY', 'SKIP', 'KEEP'].includes(result.action)) {
       throw new Error(`Invalid action: ${result.action}`);
@@ -127,7 +140,7 @@ Return ONLY a JSON object with this exact structure:
   } catch (error) {
     console.error("DeepSeek consultation failed:", error);
     // 降级策略：默认重试
-    return { 
+    return {
       action: 'RETRY', 
       reasoning: 'DeepSeek consultant failed, defaulting to retry with higher temperature.', 
       suggestedTemperature: 0.6 

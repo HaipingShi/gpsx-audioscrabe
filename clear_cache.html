@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear AudioScribe Cache</title>
+</head>
+<body>
+    <h1>Clear AudioScribe Cache</h1>
+    <button onclick="clearCache()">Clear Cache</button>
+    <div id="result"></div>
+    
+    <script>
+        function clearCache() {
+            localStorage.removeItem('audioscribe_state');
+            document.getElementById('result').innerHTML = '<p style="color: green;">Cache cleared successfully!</p>';
+        }
+        
+        // Auto-clear on load
+        clearCache();
+    </script>
+</body>
+</html>

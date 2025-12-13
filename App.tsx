@@ -61,7 +61,10 @@ const App: React.FC = () => {
               ...t,
               blob: new Blob(), // 空 blob，无法重新处理
               logs: t.logs || [],
-              lastUpdated: Date.now()
+              lastUpdated: Date.now(),
+              stateHistory: t.stateHistory || [], // 确保是数组
+              timings: t.timings || {},
+              needsRetry: t.needsRetry || false
             }))
           }));
         }
@@ -171,19 +174,20 @@ const App: React.FC = () => {
     const interval = setInterval(() => {
       const now = Date.now();
       state.tasks.forEach(task => {
+        // 注意：POLISHING 是异步的，不应该被 Watchdog 监控
+        // 因为 Polish 在后台执行，不占用并发槽位
         const isBusy = [
           AgentPhase.PREPROCESSING,
-          AgentPhase.PERCEPTION, 
-          AgentPhase.ACTION, 
-          AgentPhase.VERIFICATION, 
-          AgentPhase.CONSULTATION, 
-          AgentPhase.POLISHING,
+          AgentPhase.PERCEPTION,
+          AgentPhase.ACTION,
+          AgentPhase.VERIFICATION,
+          AgentPhase.CONSULTATION,
           AgentPhase.REFINEMENT
         ].includes(task.phase);
 
         if (isBusy && (now - task.lastUpdated > WATCHDOG_TIMEOUT_MS)) {
            console.warn(`Watchdog: Task ${task.id} stalled. Restarting...`);
-           
+
            const controller = taskControllers.current.get(task.id);
            if (controller) {
              controller.abort("Watchdog Timeout");
