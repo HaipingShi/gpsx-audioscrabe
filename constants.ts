@@ -14,5 +14,12 @@ export const SUPPORTED_MIME_TYPES = [
   'audio/aac'
 ];
 
+// === 双模型架构 ===
+// Gemini Flash: 快速音频转写（粗写）
 export const AUDIO_MODEL = 'gemini-2.5-flash';
-export const REASONING_MODEL = 'gemini-3-pro-preview'; // For verification and correction
+
+// Gemini Pro: 智能咨询和验证（已弃用，改用 DeepSeek）
+export const REASONING_MODEL = 'gemini-3-pro-preview';
+
+// DeepSeek: 文本精校和智能咨询（精校）
+export const DEEPSEEK_MODEL = 'deepseek-chat';
