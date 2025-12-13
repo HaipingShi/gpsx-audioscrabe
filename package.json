@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:worker": "wrangler dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:worker": "wrangler deploy --dry-run",
+    "preview": "vite preview",
+    "deploy:worker": "wrangler deploy",
+    "worker:tail": "wrangler tail"
   },
   "dependencies": {
     "@google/genai": "^1.33.0",
+    "hono": "^4.11.0",
     "lucide-react": "^0.561.0",
     "openai": "^6.10.0",
     "react": "^19.2.3",
@@ -18,7 +24,9 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.1",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "wrangler": "^4.54.0"
   }
 }

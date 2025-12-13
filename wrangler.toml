@@ -1,0 +1,42 @@
+name = "audioscribe-flux-worker"
+main = "worker/index.ts"
+compatibility_date = "2024-12-13"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers 配置
+workers_dev = true
+
+# 环境变量（开发环境）
+[env.dev]
+name = "audioscribe-flux-worker-dev"
+
+# 环境变量（生产环境）
+[env.production]
+name = "audioscribe-flux-worker"
+
+# D1 数据库绑定（稍后配置）
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "audioscribe-db"
+# database_id = "your-database-id"
+
+# R2 存储绑定（稍后配置）
+# [[r2_buckets]]
+# binding = "AUDIO_BUCKET"
+# bucket_name = "audioscribe-audio"
+
+# KV 命名空间（用于缓存，可选）
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-kv-id"
+
+# Durable Objects 绑定（稍后配置）
+# [[durable_objects.bindings]]
+# name = "TRANSCRIPTION_DO"
+# class_name = "TranscriptionDurableObject"
+# script_name = "audioscribe-flux-worker"
+
+# 环境变量（敏感信息通过 wrangler secret 设置）
+# [vars]
+# ENVIRONMENT = "development"
+
