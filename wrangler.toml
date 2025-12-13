@@ -30,11 +30,16 @@ database_id = "preview" # 本地开发使用 preview，生产环境需替换为�
 # binding = "CACHE"
 # id = "your-kv-id"
 
-# Durable Objects 绑定（稍后配置）
-# [[durable_objects.bindings]]
-# name = "TRANSCRIPTION_DO"
-# class_name = "TranscriptionDurableObject"
-# script_name = "audioscribe-flux-worker"
+# Durable Objects 绑定
+[[durable_objects.bindings]]
+name = "TRANSCRIPTION_PROCESSOR"
+class_name = "TranscriptionProcessor"
+script_name = "audioscribe-flux-worker"
+
+# Durable Objects 迁移
+[[migrations]]
+tag = "v1"
+new_classes = ["TranscriptionProcessor"]
 
 # 环境变量（敏感信息通过 wrangler secret 设置）
 # [vars]

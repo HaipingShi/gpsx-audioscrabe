@@ -2,8 +2,12 @@ import { Hono } from 'hono';
 import type { Env } from '../index';
 import { DatabaseService } from '../services/database';
 import { encrypt, decrypt, generateId } from '../services/encryption';
+import transcribeRoutes from './transcribe';
 
 export const apiRoutes = new Hono<{ Bindings: Env }>();
+
+// 转写任务路由
+apiRoutes.route('/transcribe', transcribeRoutes);
 
 // ==================== 用户 API 配置管理 ====================
 

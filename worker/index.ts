@@ -14,8 +14,8 @@ export interface Env {
   // KV 缓存（可选）
   // CACHE: KVNamespace;
 
-  // Durable Objects（稍后添加）
-  // TRANSCRIPTION_DO: DurableObjectNamespace;
+  // Durable Objects
+  TRANSCRIPTION_PROCESSOR: DurableObjectNamespace;
 
   // 环境变量
   ENVIRONMENT?: string;
@@ -69,4 +69,7 @@ app.onError((err, c) => {
 });
 
 export default app;
+
+// 导出 Durable Object
+export { TranscriptionProcessor } from './durable-objects/TranscriptionProcessor';
 
