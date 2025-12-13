@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../index';
+import { DatabaseService } from '../services/database';
+import { encrypt, decrypt, generateId } from '../services/encryption';
 
 export const apiRoutes = new Hono<{ Bindings: Env }>();
 
@@ -11,8 +13,26 @@ apiRoutes.post('/config', async (c) => {
     const body = await c.req.json();
     const { userId, provider, apiKey, mode } = body;
 
-    // TODO: 实现加密存储到 D1
-    // TODO: 验证 API Key 有效性
+    if (!userId || !provider || !mode) {
+      return c.json({
+        success: false,
+        error: 'Missing required fields',
+      }, 400);
+    }
+
+    const db = new DatabaseService(c.env.DB);
+    const masterKey = c.env.ENCRYPTION_KEY || 'default-key-change-in-production';
+
+    // 加密 API Key
+    const encryptedApiKey = await encrypt(apiKey, masterKey);
+
+    // 保存到数据库
+    await db.saveUserApiConfig({
+      userId,
+      provider,
+      encryptedApiKey,
+      mode,
+    });
 
     return c.json({
       success: true,
@@ -21,14 +41,15 @@ apiRoutes.post('/config', async (c) => {
         userId,
         provider,
         mode,
-        // 不返回 API Key
+        hasApiKey: true,
       },
     });
   } catch (error) {
+    console.error('Save config error:', error);
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 
@@ -36,17 +57,20 @@ apiRoutes.post('/config', async (c) => {
 apiRoutes.get('/config/:userId', async (c) => {
   try {
     const userId = c.req.param('userId');
+    const db = new DatabaseService(c.env.DB);
 
-    // TODO: 从 D1 读取配置
+    const config = await db.getUserApiConfig(userId);
+
+    if (!config) {
+      return c.json({
+        success: false,
+        error: 'Configuration not found',
+      }, 404);
+    }
 
     return c.json({
       success: true,
-      data: {
-        userId,
-        provider: 'gemini', // 示例数据
-        mode: 'self-hosted',
-        hasApiKey: true,
-      },
+      data: config,
     });
   } catch (error) {
     return c.json({
@@ -62,18 +86,29 @@ apiRoutes.post('/config/validate', async (c) => {
     const body = await c.req.json();
     const { provider, apiKey } = body;
 
-    // TODO: 实现 API Key 验证逻辑
+    if (!provider || !apiKey) {
+      return c.json({
+        success: false,
+        error: 'Missing provider or apiKey',
+      }, 400);
+    }
+
+    // 简单验证：检查 API Key 格式
+    // 实际生产环境应该调用对应的 API 进行验证
+    const isValid = apiKey.length > 10;
 
     return c.json({
       success: true,
-      valid: true,
-      provider,
+      data: {
+        valid: isValid,
+        provider,
+      },
     });
   } catch (error) {
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 
@@ -85,25 +120,62 @@ apiRoutes.post('/jobs', async (c) => {
     const body = await c.req.json();
     const { userId, fileName, fileSize, audioData } = body;
 
-    // TODO: 创建 Durable Object 实例
-    // TODO: 保存到 D1
-    // TODO: 上传音频到 R2
+    if (!userId || !fileName || !fileSize) {
+      return c.json({
+        success: false,
+        error: 'Missing required fields',
+      }, 400);
+    }
 
-    const jobId = crypto.randomUUID();
+    const db = new DatabaseService(c.env.DB);
+    const jobId = generateId(16);
+
+    // 获取用户配置以确定使用哪个引擎
+    const userConfig = await db.getUserApiConfig(userId);
+    const engine = userConfig?.provider || 'gemini';
+
+    // 创建任务记录
+    await db.createJob({
+      jobId,
+      userId,
+      fileName,
+      fileSize,
+      status: 'created',
+      progress: 0,
+      engine,
+    });
+
+    // 记录状态转换
+    await db.recordStateTransition({
+      jobId,
+      fromState: null,
+      toState: 'created',
+      reason: 'Job created',
+    });
+
+    // TODO: 上传音频到 R2
+    // TODO: 创建 Durable Object 实例开始处理
 
     return c.json({
       success: true,
       data: {
         jobId,
+        userId,
+        fileName,
+        fileSize,
         status: 'created',
+        progress: 0,
+        engine,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     }, 201);
   } catch (error) {
+    console.error('Create job error:', error);
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 
@@ -111,23 +183,27 @@ apiRoutes.post('/jobs', async (c) => {
 apiRoutes.get('/jobs/:jobId', async (c) => {
   try {
     const jobId = c.req.param('jobId');
+    const db = new DatabaseService(c.env.DB);
 
-    // TODO: 从 D1 或 Durable Object 获取状态
+    const job = await db.getJob(jobId);
+
+    if (!job) {
+      return c.json({
+        success: false,
+        error: 'Job not found',
+      }, 404);
+    }
 
     return c.json({
       success: true,
-      data: {
-        jobId,
-        status: 'processing',
-        progress: 45,
-        createdAt: new Date().toISOString(),
-      },
+      data: job,
     });
   } catch (error) {
+    console.error('Get job error:', error);
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 
@@ -139,22 +215,25 @@ apiRoutes.get('/jobs', async (c) => {
     const limit = parseInt(c.req.query('limit') || '20');
     const offset = parseInt(c.req.query('offset') || '0');
 
-    // TODO: 从 D1 查询任务列表
+    const db = new DatabaseService(c.env.DB);
+
+    const result = await db.listJobs({
+      userId,
+      status,
+      limit,
+      offset,
+    });
 
     return c.json({
       success: true,
-      data: {
-        jobs: [],
-        total: 0,
-        limit,
-        offset,
-      },
+      data: result,
     });
   } catch (error) {
+    console.error('List jobs error:', error);
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 
@@ -162,23 +241,42 @@ apiRoutes.get('/jobs', async (c) => {
 apiRoutes.get('/jobs/:jobId/compare', async (c) => {
   try {
     const jobId = c.req.param('jobId');
+    const db = new DatabaseService(c.env.DB);
 
-    // TODO: 从 D1 获取原始转写和精校文本
+    const job = await db.getJob(jobId);
+
+    if (!job) {
+      return c.json({
+        success: false,
+        error: 'Job not found',
+      }, 404);
+    }
+
+    if (!job.rawTranscription || !job.polishedText) {
+      return c.json({
+        success: false,
+        error: 'Transcription not completed yet',
+      }, 400);
+    }
+
+    // 简单的差异计算（实际应该使用更复杂的 diff 算法）
+    const diff = [];
 
     return c.json({
       success: true,
       data: {
         jobId,
-        rawTranscription: '',
-        polishedText: '',
-        diff: [],
+        rawTranscription: job.rawTranscription,
+        polishedText: job.polishedText,
+        diff,
       },
     });
   } catch (error) {
+    console.error('Get compare data error:', error);
     return c.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
-    }, 400);
+    }, 500);
   }
 });
 

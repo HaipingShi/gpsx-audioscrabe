@@ -14,11 +14,11 @@ name = "audioscribe-flux-worker-dev"
 [env.production]
 name = "audioscribe-flux-worker"
 
-# D1 数据库绑定（稍后配置）
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "audioscribe-db"
-# database_id = "your-database-id"
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "audioscribe-db"
+database_id = "preview" # 本地开发使用 preview，生产环境需替换为实际 ID
 
 # R2 存储绑定（稍后配置）
 # [[r2_buckets]]

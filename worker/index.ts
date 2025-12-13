@@ -5,20 +5,21 @@ import { apiRoutes } from './routes/api';
 
 // 定义环境变量类型
 export interface Env {
-  // D1 数据库（稍后添加）
-  // DB: D1Database;
-  
+  // D1 数据库
+  DB: D1Database;
+
   // R2 存储（稍后添加）
   // AUDIO_BUCKET: R2Bucket;
-  
+
   // KV 缓存（可选）
   // CACHE: KVNamespace;
-  
+
   // Durable Objects（稍后添加）
   // TRANSCRIPTION_DO: DurableObjectNamespace;
-  
+
   // 环境变量
   ENVIRONMENT?: string;
+  ENCRYPTION_KEY?: string; // 主加密密钥
 }
 
 // 创建 Hono 应用

@@ -11,7 +11,10 @@
     "build:worker": "wrangler deploy --dry-run",
     "preview": "vite preview",
     "deploy:worker": "wrangler deploy",
-    "worker:tail": "wrangler tail"
+    "worker:tail": "wrangler tail",
+    "db:init": "bash scripts/init-db.sh",
+    "db:migrate": "wrangler d1 execute audioscribe-db --local --file=./migrations/0001_initial_schema.sql",
+    "db:query": "wrangler d1 execute audioscribe-db --local --command"
   },
   "dependencies": {
     "@google/genai": "^1.33.0",
