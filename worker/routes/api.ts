@@ -243,6 +243,30 @@ apiRoutes.get('/jobs/:jobId', async (c) => {
   }
 });
 
+// 删除任务
+apiRoutes.delete('/jobs/:jobId', async (c) => {
+  try {
+    const jobId = c.req.param('jobId');
+
+    // 删除任务
+    await c.env.DB.prepare('DELETE FROM transcription_jobs WHERE job_id = ?').bind(jobId).run();
+
+    // 删除相关的状态转换记录
+    await c.env.DB.prepare('DELETE FROM state_transitions WHERE job_id = ?').bind(jobId).run();
+
+    return c.json({
+      success: true,
+      message: 'Job deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete job error:', error);
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
 // 获取用户所有任务
 apiRoutes.get('/jobs', async (c) => {
   try {
